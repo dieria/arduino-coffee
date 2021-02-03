@@ -1,2 +1,10 @@
 # arduino-coffee
-Espresso Machine with Arduino Sensors
+Simple Espresso Machine extension with sensors and a display
+
+## Timer
+
+
+
+## Weight
+
+## Temperature
