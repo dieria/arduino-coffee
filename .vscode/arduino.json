@@ -1,6 +1,6 @@
 {
     "board": "arduino:avr:pro",
     "configuration": "cpu=16MHzatmega328",
-    "sketch": "Bastis_Coffee_Bar.ino",
+    "sketch": "arduino-coffee.ino",
     "port": "COM4"
 }

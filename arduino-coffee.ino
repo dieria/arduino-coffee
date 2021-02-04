@@ -7,9 +7,10 @@
 #include <EEPROM.h>
 
 // GENERAL
-String coffeebar = "1337 Coffee Bar" unsigned long printinterval = 200;
+#define SERIALDEBUG false
+String coffeebar = "1337 Coffee Bar";
+unsigned long printinterval = 200;
 boolean brewingInitialized = false;
-#define SERIALDEBUG false;
 
 // PUMP SWITCH
 #define PUMPSWITCH_PIN 2
@@ -21,16 +22,19 @@ unsigned long timer = 0;
 unsigned long looptime = millis();
 
 // DISPLAY
-#define SCREEN_WIDTH 128    // OLED display width, in pixels
-#define SCREEN_HEIGHT 32    // OLED display height, in pixels
-#define OLED_RESET 4        // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+const int screen_width = 128;  // OLED display width, in pixels
+const int screen_height = 32;  // OLED display height, in pixels
+int8_t oled_reset = 4;         // Reset pin # (or -1 if sharing Arduino reset pin)
+uint8_t screen_address = 0x3C; ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(screen_width, screen_height, &Wire, oled_reset);
 
 // TEMPERATURE
-int max6675SO = 8;   // Serial Output am PIN 8
-int max6675CS = 9;   // Chip Select am PIN 9
-int max6675CLK = 10; // Serial Clock am PIN 10
+const int max6675SO = 8;   // Serial Output am PIN 8
+const int max6675CS = 9;   // Chip Select am PIN 9
+const int max6675CLK = 10; // Serial Clock am PIN 10
+double temp = 0.0;
+int currentIndex = 0;
+double lastvals[5] = {-1, -1, -1, -1, -1};
 MAX6675 ktc(max6675CLK, max6675CS, max6675SO);
 
 // WEIGHT SCALE
@@ -44,7 +48,10 @@ long t;
 // reset and tare scale
 void tare()
 {
+#if SERIALDEBUG
   Serial.println("start tare");
+#endif
+
   LoadCell.begin();
   float calibrationValue; // calibration value (see example file "Calibration.ino")
   //calibrationValue = 696.0; // uncomment this if you want to set the calibration value in the sketch
@@ -54,27 +61,31 @@ void tare()
   LoadCell.start(stabilizingtime, _tare);
   if (LoadCell.getTareTimeoutFlag())
   {
+#if SERIALDEBUG
     Serial.println("Timeout, check MCU>HX711 wiring and pin designations");
+#endif
   }
   else
   {
     LoadCell.setCalFactor(calibrationValue); // set calibration value (float)
+
+#if SERIALDEBUG
     Serial.println("Startup is complete");
+#endif
   }
 }
 
 // arduino setup
 void setup()
 {
-  if (SERIALDEBUG == true)
-  {
-    Serial.begin(9600);
-  }
+#if SERIALDEBUG
+  Serial.begin(9600);
+#endif
 
   // signal drops from 5V to 0V while pump is running
   pinMode(PUMPSWITCH_PIN, INPUT_PULLUP);
 
-  display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+  display.begin(SSD1306_SWITCHCAPVCC, screen_address);
 
   display.clearDisplay();
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
@@ -121,6 +132,33 @@ void initBrewing()
   delay(1000);
 }
 
+double getTemp()
+{
+  // Lesen des Temperaturwertes in Grad Celsius
+  double readtemp = ktc.readCelsius();
+
+  double sum = readtemp;
+  int count = 1;
+  for (int i = 0; i < 5; i = i + 1)
+  {
+    if (lastvals[i] > 0 && !(i == currentIndex))
+    {
+      sum = lastvals[i];
+      count = count + 1;
+    }
+  }
+
+  lastvals[currentIndex] = readtemp;
+
+  currentIndex = currentIndex + 1;
+  if (currentIndex > 4)
+  {
+    currentIndex = 0;
+  }
+
+  return sum / count; //average
+}
+
 void loop()
 {
 
@@ -128,8 +166,7 @@ void loop()
   {
     looptime = millis();
 
-    // Lesen des Temperaturwertes in Grad Celsius
-    double temp = ktc.readCelsius();
+    double temp = getTemp();
 
     if (digitalRead(PUMPSWITCH_PIN) == LOW)
     {
@@ -137,12 +174,11 @@ void loop()
       {
         initBrewing();
       }
-      if (SERIALDEBUG == true)
-      {
-        Serial.println("TIMER");
-        Serial.println(millis());
-        Serial.println(starttime);
-      }
+#if SERIALDEBUG
+      Serial.println("TIMER");
+      Serial.println(millis());
+      Serial.println(starttime);
+#endif
 
       timer = (millis() - starttime) / 1000;
     }
@@ -153,11 +189,10 @@ void loop()
 
     displayData(temp, timer, weight);
 
-    if (SERIALDEBUG == true)
-    {
-      Serial.print(temp);
-      Serial.println("C");
-    }
+#if SERIALDEBUG
+    Serial.print(temp);
+    Serial.println("C");
+#endif
 
     display.display();
   }
@@ -175,10 +210,9 @@ void loop()
     newDataReady = 0;
   }
 
-  if (SERIALDEBUG == true)
-  {
-    Serial.println(weight);
-  }
-  
+#if SERIALDEBUG
+  Serial.println(weight);
+#endif
+
   delay(20);
 }
