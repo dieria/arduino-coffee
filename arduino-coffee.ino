@@ -34,7 +34,7 @@ const int max6675CS = 9;   // Chip Select am PIN 9
 const int max6675CLK = 10; // Serial Clock am PIN 10
 double temp = 0.0;
 int currentIndex = 0;
-double lastvals[5] = {-1, -1, -1, -1, -1};
+double lastvals[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 MAX6675 ktc(max6675CLK, max6675CS, max6675SO);
 
 // WEIGHT SCALE
@@ -77,6 +77,7 @@ void tare()
 
 // arduino setup
 void setup()
+
 {
 #if SERIALDEBUG
   Serial.begin(9600);
@@ -107,9 +108,9 @@ void displayData(double temp, unsigned long timer, float weight)
   display.setCursor(0, 0);             // Start at top-left corner
 
   display.println("1337 Coffee Bar");
-  display.println("Temperatur: " + String(temp) + " C");
-  display.println("Timer: " + String(timer) + " s");
-  display.println("Volumen: " + String(weight) + " ml");
+  display.println("Temperatur: " + String(temp, 1) + " C");
+  display.println("Timer:      " + String(timer) + " s");
+  display.println("Volumen:    " + String(weight, 1) + " ml");
 }
 
 void initBrewing()
@@ -138,12 +139,12 @@ double getTemp()
   double readtemp = ktc.readCelsius();
 
   double sum = readtemp;
-  int count = 1;
-  for (int i = 0; i < 5; i = i + 1)
+  float count = 1;
+  for (int i = 0; i < 10; i = i + 1)
   {
     if (lastvals[i] > 0 && !(i == currentIndex))
     {
-      sum = lastvals[i];
+      sum = sum + lastvals[i];
       count = count + 1;
     }
   }
@@ -151,7 +152,7 @@ double getTemp()
   lastvals[currentIndex] = readtemp;
 
   currentIndex = currentIndex + 1;
-  if (currentIndex > 4)
+  if (currentIndex > 9)
   {
     currentIndex = 0;
   }
