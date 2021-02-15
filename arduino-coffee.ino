@@ -21,7 +21,6 @@ boolean pumprunning = false;
 unsigned long starttime = 0;
 unsigned long timer = 0;
 unsigned long looptime = millis();
-unsigned long currenttime = 0;
 
 // DISPLAY
 const int screen_width = 128;  // OLED display width, in pixels
@@ -40,6 +39,7 @@ double lastvals[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 MAX6675 ktc(max6675CLK, max6675CS, max6675SO);
 
 // WEIGHT SCALE
+boolean scaleError = false;
 float weight = 0;
 float calibrationValue = 696;
 const int HX711_dout = 4; //mcu > HX711 dout pin
@@ -63,6 +63,7 @@ void initScale()
   LoadCell.start(stabilizingtime, _tare);
   if (LoadCell.getTareTimeoutFlag())
   {
+    scaleError = true;
 #if SERIALDEBUG
     Serial.println("Timeout, check MCU>HX711 wiring and pin designations");
 #endif
@@ -76,7 +77,7 @@ void initScale()
 // set the scale to zero
 void tareScale()
 {
-  LoadCell.tareNoDelay(); //nonblocking tare
+  LoadCell.tare(); //blocking tare
 }
 
 // start up the display
@@ -103,7 +104,11 @@ void displayData(double temp, unsigned long timer, float weight)
   display.println(" 1337 Coffee Bar");
   display.println(" Temp.:   " + String(temp, 1) + " C");
   display.println(" Timer:   " + String(timer) + " s");
-  display.println(" Vol.:    " + String(weight, 0) + " ml");
+  if (!scaleError) {
+    display.println(" Vol.:   " + String(weight, 0) + " ml");
+  } else {
+    display.println(" SCALE ERROR");
+  }
 }
 
 // reset scale and timer and display a pump start message
@@ -111,8 +116,8 @@ void initBrewing()
 {
   timer = 0;
   starttime = millis();
-
-  tareScale();
+  
+  brewingInitialized = true;
 
   display.clearDisplay();
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
@@ -122,8 +127,8 @@ void initBrewing()
   display.println("...pump it up!");
   display.display();
 
-  brewingInitialized = true;
-
+  tareScale();
+  
   delay(1000);
 }
 
@@ -194,11 +199,11 @@ void setup()
 // main cpu loop
 void loop()
 {
-  currenttime = millis();
+  updateWeight();
 
-  if (currenttime - looptime >= printinterval)
+  if (millis() - looptime >= printinterval)
   {
-    looptime = currenttime;
+    looptime = millis();
 
     double temp = getTemp();
 
@@ -214,7 +219,7 @@ void loop()
       Serial.println(starttime);
 #endif
 
-      timer = (currenttime - starttime) / 1000;
+      timer = (millis() - starttime) / 1000;
     }
     else
     {
