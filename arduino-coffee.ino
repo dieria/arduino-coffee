@@ -8,6 +8,7 @@
 
 // GENERAL
 #define SERIALDEBUG false
+#define TEMPSTUDY false
 String coffeebar = "1337 Coffee Bar";
 unsigned long printinterval = 200;
 boolean brewingInitialized = false;
@@ -20,6 +21,7 @@ boolean pumprunning = false;
 unsigned long starttime = 0;
 unsigned long timer = 0;
 unsigned long looptime = millis();
+unsigned long currenttime = 0;
 
 // DISPLAY
 const int screen_width = 128;  // OLED display width, in pixels
@@ -39,25 +41,25 @@ MAX6675 ktc(max6675CLK, max6675CS, max6675SO);
 
 // WEIGHT SCALE
 float weight = 0;
+float calibrationValue = 696;
 const int HX711_dout = 4; //mcu > HX711 dout pin
 const int HX711_sck = 5;  //mcu > HX711 sck pin
 HX711_ADC LoadCell(HX711_dout, HX711_sck);
 const int calVal_eepromAdress = 0;
 long t;
 
-// reset and tare scale
-void tare()
+// initialize the scale
+void initScale()
 {
+  EEPROM.get(calVal_eepromAdress, calibrationValue); //set by calibration ino script
+
 #if SERIALDEBUG
   Serial.println("start tare");
 #endif
 
   LoadCell.begin();
-  float calibrationValue; // calibration value (see example file "Calibration.ino")
-  //calibrationValue = 696.0; // uncomment this if you want to set the calibration value in the sketch
-  EEPROM.get(calVal_eepromAdress, calibrationValue); // uncomment this if you want to fetch the calibration value from eeprom
-  long stabilizingtime = 2000;                       // preciscion right after power-up can be improved by adding a few seconds of stabilizing time
-  boolean _tare = true;                              //set this to false if you don't want tare to be performed in the next step
+  long stabilizingtime = 1000; // preciscion right after power-up can be improved by adding a few seconds of stabilizing time
+  boolean _tare = true;        //set this to false if you don't want tare to be performed in the next step
   LoadCell.start(stabilizingtime, _tare);
   if (LoadCell.getTareTimeoutFlag())
   {
@@ -68,38 +70,29 @@ void tare()
   else
   {
     LoadCell.setCalFactor(calibrationValue); // set calibration value (float)
-
-#if SERIALDEBUG
-    Serial.println("Startup is complete");
-#endif
   }
 }
 
-// arduino setup
-void setup()
-
+// set the scale to zero
+void tareScale()
 {
-#if SERIALDEBUG
-  Serial.begin(9600);
-#endif
+  LoadCell.tareNoDelay(); //nonblocking tare
+}
 
-  // signal drops from 5V to 0V while pump is running
-  pinMode(PUMPSWITCH_PIN, INPUT_PULLUP);
-
+// start up the display
+void initDisplay()
+{
   display.begin(SSD1306_SWITCHCAPVCC, screen_address);
 
   display.clearDisplay();
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE); // Draw white text
   display.setCursor(0, 10);            // Start at top-left corner
-  display.println(coffeebar);
+  display.println(" " + coffeebar);
   display.display();
-
-  starttime = millis();
-
-  tare();
 }
 
+// update the display with all values etc
 void displayData(double temp, unsigned long timer, float weight)
 {
   display.clearDisplay();
@@ -107,18 +100,19 @@ void displayData(double temp, unsigned long timer, float weight)
   display.setTextColor(SSD1306_WHITE); // Draw white text
   display.setCursor(0, 0);             // Start at top-left corner
 
-  display.println("1337 Coffee Bar");
-  display.println("Temperatur: " + String(temp, 1) + " C");
-  display.println("Timer:      " + String(timer) + " s");
-  display.println("Volumen:    " + String(weight, 1) + " ml");
+  display.println(" 1337 Coffee Bar");
+  display.println(" Temp.:   " + String(temp, 1) + " C");
+  display.println(" Timer:   " + String(timer) + " s");
+  display.println(" Vol.:    " + String(weight, 0) + " ml");
 }
 
+// reset scale and timer and display a pump start message
 void initBrewing()
 {
   timer = 0;
   starttime = millis();
 
-  tare();
+  tareScale();
 
   display.clearDisplay();
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
@@ -133,6 +127,7 @@ void initBrewing()
   delay(1000);
 }
 
+// read the temperature from the sensor and average it with the last 10 reads
 double getTemp()
 {
   // Lesen des Temperaturwertes in Grad Celsius
@@ -160,12 +155,50 @@ double getTemp()
   return sum / count; //average
 }
 
+// update the weight and save it to weight variable when ready
+void updateWeight()
+{
+  //waage
+  static boolean newDataReady = 0;
+  if (LoadCell.update())
+    newDataReady = true;
+
+  // get smoothed value from the dataset:
+  if (newDataReady)
+  {
+    weight = LoadCell.getData();
+    newDataReady = false;
+  }
+}
+
+// arduino setup
+void setup()
+{
+#if SERIALDEBUG
+  Serial.begin(9600);
+#endif
+
+#if TEMPSTUDY
+  Serial.begin(9600);
+#endif
+
+  // signal drops from 5V to 0V while pump is running
+  pinMode(PUMPSWITCH_PIN, INPUT_PULLUP);
+
+  starttime = millis();
+
+  initDisplay();
+  initScale();
+}
+
+// main cpu loop
 void loop()
 {
+  currenttime = millis();
 
-  if (millis() - looptime >= printinterval)
+  if (currenttime - looptime >= printinterval)
   {
-    looptime = millis();
+    looptime = currenttime;
 
     double temp = getTemp();
 
@@ -181,7 +214,7 @@ void loop()
       Serial.println(starttime);
 #endif
 
-      timer = (millis() - starttime) / 1000;
+      timer = (currenttime - starttime) / 1000;
     }
     else
     {
@@ -190,25 +223,16 @@ void loop()
 
     displayData(temp, timer, weight);
 
+#if TEMPSTUDY
+    Serial.println(temp);
+#endif
+
 #if SERIALDEBUG
     Serial.print(temp);
     Serial.println("C");
 #endif
 
     display.display();
-  }
-
-  //waage
-  static boolean newDataReady = 0;
-  if (LoadCell.update())
-    newDataReady = true;
-  // get smoothed value from the dataset:
-  if (newDataReady)
-  {
-    weight = LoadCell.getData();
-    //Serial.print("Load_cell output val: ");
-    //Serial.println(weight);
-    newDataReady = 0;
   }
 
 #if SERIALDEBUG
