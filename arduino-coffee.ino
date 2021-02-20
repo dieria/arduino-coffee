@@ -9,7 +9,7 @@
 // GENERAL
 #define SERIALDEBUG false
 #define TEMPSTUDY false
-#define TITLE "1337 Coffee Bar"
+#define TITLE " 1337 Coffee Bar"
 
 // PUMP SWITCH
 #define PUMPSWITCH_PIN 2
@@ -99,7 +99,7 @@ void initDisplay()
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE); // Draw white text
   display.setCursor(0, 10);            // Start at top-left corner
-  display.println(" " + TITLE);
+  display.println(TITLE);
   display.display();
 }
 
@@ -113,7 +113,7 @@ void displayData(double temp, unsigned long timer, float weight)
     display.setTextColor(SSD1306_WHITE); // Draw white text
     display.setCursor(0, 0);             // Start at top-left corner
 
-    display.println(" " + TITLE);
+    display.println(TITLE);
     display.println(" Temp.:   " + String(temp, 1) + " C");
     display.println(" Timer:   " + String(timer) + " s");
     if (!scaleError)
@@ -271,5 +271,4 @@ void loop()
   }
 
   displayData(temp, timer, weight);
-}
 }
