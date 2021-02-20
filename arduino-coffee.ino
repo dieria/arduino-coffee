@@ -9,20 +9,25 @@
 // GENERAL
 #define SERIALDEBUG false
 #define TEMPSTUDY false
-String coffeebar = "1337 Coffee Bar";
-unsigned long printinterval = 200;
-boolean brewingInitialized = false;
+#define TITLE "1337 Coffee Bar"
 
 // PUMP SWITCH
 #define PUMPSWITCH_PIN 2
+unsigned long lastPumpRefresh = 0;
+unsigned long pumpRefreshInterval = 800;
 boolean pumprunning = false;
+boolean brewingInitialized = false;
 
 // TIMER
 unsigned long starttime = 0;
 unsigned long timer = 0;
-unsigned long looptime = millis();
+unsigned long looptime = 0;
 
 // DISPLAY
+unsigned long msgStartTime = 0;
+unsigned long msgDuration = 1000;
+unsigned long lastDisplayRefresh = 0;
+unsigned long refreshInterval = 500;
 const int screen_width = 128;  // OLED display width, in pixels
 const int screen_height = 32;  // OLED display height, in pixels
 int8_t oled_reset = 4;         // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -30,6 +35,8 @@ uint8_t screen_address = 0x3C; ///< See datasheet for Address; 0x3D for 128x64, 
 Adafruit_SSD1306 display(screen_width, screen_height, &Wire, oled_reset);
 
 // TEMPERATURE
+unsigned long lastTempRefresh = 0;
+unsigned long tempRefreshInterval = 500;
 const int max6675SO = 8;   // Serial Output am PIN 8
 const int max6675CS = 9;   // Chip Select am PIN 9
 const int max6675CLK = 10; // Serial Clock am PIN 10
@@ -39,6 +46,8 @@ double lastvals[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 MAX6675 ktc(max6675CLK, max6675CS, max6675SO);
 
 // WEIGHT SCALE
+unsigned long lastWeightRefresh = 0;
+unsigned long weightRefreshInterval = 20;
 boolean scaleError = false;
 float weight = 0;
 float calibrationValue = 696;
@@ -52,10 +61,6 @@ long t;
 void initScale()
 {
   EEPROM.get(calVal_eepromAdress, calibrationValue); //set by calibration ino script
-
-#if SERIALDEBUG
-  Serial.println("start tare");
-#endif
 
   LoadCell.begin();
   long stabilizingtime = 1000; // preciscion right after power-up can be improved by adding a few seconds of stabilizing time
@@ -77,6 +82,9 @@ void initScale()
 // set the scale to zero
 void tareScale()
 {
+#if SERIALDEBUG
+  Serial.println("start tare");
+#endif
   LoadCell.tare(); //blocking tare
 }
 
@@ -85,29 +93,38 @@ void initDisplay()
 {
   display.begin(SSD1306_SWITCHCAPVCC, screen_address);
 
+  msgStartTime = millis();
+
   display.clearDisplay();
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE); // Draw white text
   display.setCursor(0, 10);            // Start at top-left corner
-  display.println(" " + coffeebar);
+  display.println(" " + TITLE);
   display.display();
 }
 
 // update the display with all values etc
 void displayData(double temp, unsigned long timer, float weight)
 {
-  display.clearDisplay();
-  display.setTextSize(1);              // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE); // Draw white text
-  display.setCursor(0, 0);             // Start at top-left corner
+  if (millis() - lastDisplayRefresh > refreshInterval && millis() - msgStartTime > msgDuration)
+  {
+    display.clearDisplay();
+    display.setTextSize(1);              // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE); // Draw white text
+    display.setCursor(0, 0);             // Start at top-left corner
 
-  display.println(" 1337 Coffee Bar");
-  display.println(" Temp.:   " + String(temp, 1) + " C");
-  display.println(" Timer:   " + String(timer) + " s");
-  if (!scaleError) {
-    display.println(" Vol.:   " + String(weight, 0) + " ml");
-  } else {
-    display.println(" SCALE ERROR");
+    display.println(" " + TITLE);
+    display.println(" Temp.:   " + String(temp, 1) + " C");
+    display.println(" Timer:   " + String(timer) + " s");
+    if (!scaleError)
+    {
+      display.println(" Vol.:   " + String(weight, 0) + " ml");
+    }
+    else
+    {
+      display.println(" SCALE ERROR");
+    }
+    display.display();
   }
 }
 
@@ -116,8 +133,10 @@ void initBrewing()
 {
   timer = 0;
   starttime = millis();
-  
+
   brewingInitialized = true;
+
+  msgStartTime = millis();
 
   display.clearDisplay();
   display.setTextSize(1.7);            // Normal 1:1 pixel scale
@@ -128,8 +147,8 @@ void initBrewing()
   display.display();
 
   tareScale();
-  
-  delay(1000);
+
+  // delay(1000);
 }
 
 // read the temperature from the sensor and average it with the last 10 reads
@@ -163,16 +182,20 @@ double getTemp()
 // update the weight and save it to weight variable when ready
 void updateWeight()
 {
-  //waage
-  static boolean newDataReady = 0;
-  if (LoadCell.update())
-    newDataReady = true;
-
-  // get smoothed value from the dataset:
-  if (newDataReady)
+  if (millis() - lastWeightRefresh > weightRefreshInterval)
   {
-    weight = LoadCell.getData();
-    newDataReady = false;
+    //waage
+    static boolean newDataReady = 0;
+    if (LoadCell.update())
+      newDataReady = true;
+
+    // get smoothed value from the dataset:
+    if (newDataReady)
+    {
+      weight = LoadCell.getData();
+      newDataReady = false;
+    }
+    lastWeightRefresh = millis();
   }
 }
 
@@ -196,53 +219,57 @@ void setup()
   initScale();
 }
 
-// main cpu loop
-void loop()
+void checkPumpSwitch()
 {
-  updateWeight();
-
-  if (millis() - looptime >= printinterval)
+  if (millis() - lastPumpRefresh >= pumpRefreshInterval)
   {
-    looptime = millis();
-
-    double temp = getTemp();
-
     if (digitalRead(PUMPSWITCH_PIN) == LOW)
     {
       if (brewingInitialized == false)
       {
         initBrewing();
       }
-#if SERIALDEBUG
-      Serial.println("TIMER");
-      Serial.println(millis());
-      Serial.println(starttime);
-#endif
-
-      timer = (millis() - starttime) / 1000;
+      pumprunning = true;
     }
     else
     {
       brewingInitialized = false;
+      pumprunning = false;
     }
+    lastPumpRefresh = millis();
+  }
+}
 
-    displayData(temp, timer, weight);
+void updateTimer()
+{
+  timer = (millis() - starttime) / 1000;
+}
+
+void updateTemp()
+{
+  if (millis() - lastTempRefresh >= tempRefreshInterval)
+  {
+    temp = getTemp();
 
 #if TEMPSTUDY
     Serial.println(temp);
 #endif
+    lastTempRefresh = millis();
+  }
+}
 
-#if SERIALDEBUG
-    Serial.print(temp);
-    Serial.println("C");
-#endif
+// main cpu loop
+void loop()
+{
+  updateTemp();
+  updateWeight();
+  checkPumpSwitch();
 
-    display.display();
+  if (pumprunning == true)
+  {
+    updateTimer();
   }
 
-#if SERIALDEBUG
-  Serial.println(weight);
-#endif
-
-  delay(20);
+  displayData(temp, timer, weight);
+}
 }
