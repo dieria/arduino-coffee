@@ -3,12 +3,17 @@
         {
             "name": "Win32",
             "includePath": [
-                "C:\\Program Files (x86)\\Arduino\\tools\\**",
-                "C:\\Users\\Maria\\Documents\\Arduino\\libraries\\**",
-                "C:\\Program Files (x86)\\Arduino\\libraries\\**",
-                "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\**",
+                "C:\\Program Files (x86)\\Arduino\\tools\\*/**",
+                "C:\\Program Files (x86)\\Arduino\\libraries\\*/**",
+                "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\*/**",
+                "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\*/**",
+                "C:\\Users\\soundglider\\Documents\\Arduino\\libraries\\*/**",
+                "C:/Users/soundglider/Documents/Arduino/libraries/HX711_ADC/src",
                 "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\**",
-                "C:\\Users\\sbarthmes\\Dropbox\\Arduino\\libraries\\**"
+                "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\**",
+                "C:\\Program Files (x86)\\Arduino\\libraries\\**",
+                "C:\\Users\\soundglider\\Documents\\Arduino\\libraries\\**",
+                "C:\\Program Files (x86)\\Arduino\\tools\\**"
             ],
             "forcedInclude": [
                 "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\cores\\arduino\\Arduino.h"
